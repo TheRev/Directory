@@ -1,0 +1,10 @@
+/* Gray out imported rows */
+.imported-row {
+    background-color: #f0f0f0;
+    opacity: 0.6;
+}
+
+/* Optional: Highlight row on hover */
+#results-table tbody tr:hover {
+    background-color: #e6f7ff;
+}

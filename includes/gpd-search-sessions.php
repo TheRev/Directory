@@ -14,7 +14,9 @@ function gpd_get_search_session($query, $radius) {
 
 function gpd_create_search_session($query, $radius, $page_token = null) {
     global $wpdb;
-    $wpdb->insert(
+    // Always store an empty string if null, to avoid SQL NULLs
+    $page_token = $page_token !== null ? $page_token : '';
+    $result = $wpdb->insert(
         "{$wpdb->prefix}gpd_search_sessions",
         [
             'query'            => $query,
@@ -24,6 +26,11 @@ function gpd_create_search_session($query, $radius, $page_token = null) {
             'is_complete'      => 0
         ]
     );
+    if ($result === false) {
+        error_log("gpd_create_search_session: DB insert failed! Error: " . $wpdb->last_error);
+    } else {
+        error_log("gpd_create_search_session: DB insert result: $result, page_token: \"$page_token\"");
+    }
     return $wpdb->insert_id;
 }
 
@@ -31,7 +38,8 @@ function gpd_update_search_session($session_id, $next_page_token, $is_complete =
     global $wpdb;
     // Always store an empty string if null, to avoid SQL NULLs
     $next_page_token = $next_page_token !== null ? $next_page_token : '';
-    $wpdb->update(
+    error_log("gpd_update_search_session: session_id=$session_id, token=\"$next_page_token\", complete=$is_complete");
+    $result = $wpdb->update(
         "{$wpdb->prefix}gpd_search_sessions",
         [
             'last_page_token' => $next_page_token,
@@ -40,4 +48,9 @@ function gpd_update_search_session($session_id, $next_page_token, $is_complete =
         ],
         ['id' => $session_id]
     );
+    if ($result === false) {
+        error_log("gpd_update_search_session: DB update failed! Error: " . $wpdb->last_error);
+    } else {
+        error_log("gpd_update_search_session: DB update result: $result");
+    }
 }

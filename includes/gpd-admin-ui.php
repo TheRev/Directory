@@ -136,11 +136,29 @@ add_action('wp_ajax_gpd_search_places', 'gpd_search_places_handler');
 function gpd_search_places_handler() {
     global $wpdb;
 
+    // Retrieve search parameters from the request
     $query = sanitize_text_field($_POST['query']);
     $radius = sanitize_text_field($_POST['radius']);
     $limit = intval($_POST['limit']);
     $next_token = isset($_POST['next_page_token']) ? sanitize_text_field($_POST['next_page_token']) : null;
 
+    // Check if search results already exist in the cache
+    if (!$next_token) { // Only use cache for the first page
+        $cached_search = gpd_get_search_from_cache($query, $radius, $limit);
+        if ($cached_search) {
+            // Update the last accessed timestamp
+            gpd_update_last_accessed($query, $radius, $limit);
+
+            // Send cached results back to the client
+            wp_send_json([
+                'html' => $cached_search->cached_results,
+                'next_page_token' => $cached_search->next_page_token
+            ]);
+            wp_die();
+        }
+    }
+
+    // Retrieve API Key
     $api_key = get_option('gpd_api_key');
     if (empty($api_key)) {
         wp_send_json([
@@ -150,8 +168,8 @@ function gpd_search_places_handler() {
         wp_die();
     }
 
+    // Construct API endpoint and request payload
     $url = 'https://places.googleapis.com/v1/places:searchText';
-
     $post_data = [
         'textQuery'    => $query,
         'languageCode' => 'en',
@@ -168,13 +186,15 @@ function gpd_search_places_handler() {
         'headers' => [
             'Content-Type' => 'application/json',
             'X-Goog-Api-Key' => $api_key,
-            'X-Goog-FieldMask' => 'places.name,places.displayName,places.addressComponents,places.location,places.types,places.rating,places.businessStatus,places.websiteUri,places.internationalPhoneNumber,places.googleMapsUri,nextPageToken'
+            'X-Goog-FieldMask' => 'places.name,places.displayName,places.addressComponents,places.location,places.types,places.rating,places.businessStatus,places.websiteUri'
         ],
         'method' => 'POST'
     ];
 
+    // Make the API request
     $response = wp_remote_post($url, $args);
 
+    // Handle errors in API response
     if (is_wp_error($response)) {
         wp_send_json([
             'html' => '<tr><td colspan="4"><strong>Error:</strong> ' . $response->get_error_message() . '</td></tr>',
@@ -186,6 +206,7 @@ function gpd_search_places_handler() {
     $body = wp_remote_retrieve_body($response);
     $data = json_decode($body, true);
 
+    // Handle API errors or empty results
     if (!isset($data['places']) || !is_array($data['places'])) {
         $error_message = 'No places found or error in API call.';
         if (isset($data['error'])) {
@@ -198,6 +219,7 @@ function gpd_search_places_handler() {
         wp_die();
     }
 
+    // Process API response and generate HTML
     $output = '<table class="wp-list-table widefat fixed striped"><thead><tr><th class="check-column"><input type="checkbox" /></th><th>Name & Address</th><th>City</th><th>Actions</th></tr></thead><tbody>';
     $shown = 0;
 
@@ -233,10 +255,17 @@ function gpd_search_places_handler() {
 
     $output .= '</tbody></table>';
 
+    // Save search results to cache
+    if (!$next_token) { // Only cache first page
+        gpd_save_search_to_cache($query, $radius, $limit, $data['nextPageToken'] ?? null, $output);
+    }
+
+    // Send results back to the client
     wp_send_json([
         'html' => $output,
         'next_page_token' => $data['nextPageToken'] ?? null
     ]);
+
     wp_die();
 }
 

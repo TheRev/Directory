@@ -110,8 +110,8 @@ function gpd_admin_menus() {
         'Search History',
         'Search History',
         'manage_options',
-        'gpd-search-history'
-        // 'gpd_render_search_history_page'
+        'gpd-search-history',
+        'gpd_render_search_history_page'
     );
 
     // Register API Key setting

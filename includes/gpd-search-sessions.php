@@ -1,5 +1,5 @@
 <?php
-// Helper functions for managing gpd_search_sessions table gdp-search-seessions.php
+// Helper functions for managing gpd_search_sessions table
 
 function gpd_get_search_session($query, $radius) {
     global $wpdb;
@@ -29,6 +29,8 @@ function gpd_create_search_session($query, $radius, $page_token = null) {
 
 function gpd_update_search_session($session_id, $next_page_token, $is_complete = 0) {
     global $wpdb;
+    // Always store an empty string if null, to avoid SQL NULLs
+    $next_page_token = $next_page_token !== null ? $next_page_token : '';
     $wpdb->update(
         "{$wpdb->prefix}gpd_search_sessions",
         [

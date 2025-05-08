@@ -1,6 +1,6 @@
 <?php
 function gpd_register_taxonomies() {
-    register_taxonomy('gpd_region', 'gpd_place', [
+    register_taxonomy('gpd_region', 'gpd_shop', [
         'hierarchical' => true,
         'labels' => [
             'name' => 'Regions',
@@ -13,7 +13,7 @@ function gpd_register_taxonomies() {
         'show_admin_column' => true,
     ]);
 
-    register_taxonomy('gpd_destination', 'gpd_place', [
+    register_taxonomy('gpd_destination', 'gpd_shop', [
         'hierarchical' => true,
         'labels' => [
             'name' => 'Destinations',

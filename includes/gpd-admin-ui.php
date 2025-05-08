@@ -197,7 +197,47 @@ if ($next_token) {
         ]);
         wp_die();
     }
+// --- BEGIN: Save results to cache table ---
+if (isset($data['places']) && is_array($data['places'])) {
+    $query_hash = md5($query . $radius); // You can add more params if you want the hash to be unique
+    $cached_at = current_time('mysql');
+    foreach ($data['places'] as $place) {
+        // Set $place_id the same way as in your import handler.
+        // Prefer a unique Google Place ID if available, otherwise fallback to name.
+        $place_id = '';
+        if (isset($place['place_id'])) {
+            $place_id = sanitize_text_field($place['place_id']);
+        } elseif (isset($place['id'])) {
+            $place_id = sanitize_text_field($place['id']);
+        } elseif (isset($place['name'])) {
+            $place_id = sanitize_text_field($place['name']);
+        }
 
+        $wpdb->insert(
+            $wpdb->prefix . 'gpd_cache',
+            [
+                'query_hash'         => $query_hash,
+                'destination'        => $query, // or use a parsed city/destination if you have one
+                'page_token'         => $next_token ?? '',
+                'cached_at'          => $cached_at,
+                'place_id'           => $place_id,
+                'name'               => $place['displayName']['text'] ?? '',
+                'address'            => $place['formattedAddress'] ?? '',
+                'latitude'           => $place['location']['latitude'] ?? null,
+                'longitude'          => $place['location']['longitude'] ?? null,
+                'types'              => maybe_serialize($place['types'] ?? []),
+                'rating'             => $place['rating'] ?? null,
+                'user_ratings_total' => $place['userRatingCount'] ?? null,
+                'phone_number'       => $place['internationalPhoneNumber'] ?? '',
+                'website'            => $place['websiteUri'] ?? '',
+                'google_maps_url'    => $place['googleMapsUri'] ?? '',
+                'imported_count'     => 0,
+                'pages_imported'     => 1,
+            ]
+        );
+    }
+}
+// --- END: Save results to cache table ---
     $output = '';
     $shown = 0;
 

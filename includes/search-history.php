@@ -13,9 +13,18 @@ function gpd_render_search_history_page() {
     global $wpdb;
     $table_name = $wpdb->prefix . 'gpd_cache'; // Adjusted to the correct table name
 
+    // ✅ Debugging: Check if table exists
+    error_log("Checking if table $table_name exists...");
+    if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") !== $table_name) {
+        error_log("Table $table_name does not exist. Please verify table creation.");
+        echo '<div class="error"><p>Cache table does not exist. Please ensure the database is set up correctly.</p></div>';
+        return;
+    }
+
     // ✅ Handle Clear Cache Request
     if (isset($_GET['clear_cache']) && !empty($_GET['clear_cache'])) {
         $cache_id = intval($_GET['clear_cache']);
+        error_log("Clearing cache entry with ID: $cache_id");
         $wpdb->delete($table_name, ['id' => $cache_id]);
         wp_redirect(admin_url('admin.php?page=gpd-search-history&message=Cache cleared'));
         exit;
@@ -23,12 +32,14 @@ function gpd_render_search_history_page() {
 
     // ✅ Handle Clear All Cache
     if (isset($_GET['clear_all_cache'])) {
+        error_log("Clearing all cache entries...");
         $wpdb->query("TRUNCATE TABLE $table_name");
         wp_redirect(admin_url('admin.php?page=gpd-search-history&message=All cache cleared'));
         exit;
     }
 
     // ✅ Fetch Cache Entries
+    error_log("Fetching cache entries from $table_name...");
     $cache_entries = $wpdb->get_results("SELECT * FROM $table_name ORDER BY cached_at DESC");
 
     ?>
@@ -56,6 +67,9 @@ function gpd_render_search_history_page() {
                         $response_data = json_decode($entry->response_json, true);
                         $pages_cached = isset($response_data) ? count($response_data) : 0;
                         $items_imported = $entry->items_imported ?? 0;
+
+                        // ✅ Debugging: Log cache entry details
+                        error_log("Cache Entry ID: {$entry->id}, Query Hash: {$entry->query_hash}, Pages Cached: $pages_cached, Items Imported: $items_imported");
                     ?>
                         <tr>
                             <td><?php echo esc_html($entry->query_hash); ?></td>

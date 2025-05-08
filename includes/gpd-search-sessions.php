@@ -66,3 +66,20 @@ function gpd_update_search_session($session_id, $next_page_token, $is_complete =
         error_log("gpd_update_search_session: DB update result: $result");
     }
 }
+
+/**
+ * Count the number of cached shops for a given destination.
+ * @param string $destination
+ * @return int
+ */
+function gpd_count_cached_shops_by_destination($destination) {
+    global $wpdb;
+    // Assumes your gpd_cache table has a 'destination' column.
+    // If not, you may need to join via session or adjust as needed.
+    return (int) $wpdb->get_var(
+        $wpdb->prepare(
+            "SELECT COUNT(*) FROM {$wpdb->prefix}gpd_cache WHERE destination = %s",
+            $destination
+        )
+    );
+}

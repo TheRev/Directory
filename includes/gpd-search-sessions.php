@@ -1,18 +1,29 @@
 <?php
 // Helper functions for managing gpd_search_sessions table
 
-function gpd_get_search_session($query, $radius) {
+function gpd_get_search_session($query, $radius, $destination = null) {
     global $wpdb;
-    return $wpdb->get_row(
-        $wpdb->prepare(
-            "SELECT * FROM {$wpdb->prefix}gpd_search_sessions WHERE query = %s AND radius = %d AND is_complete = 0 ORDER BY last_fetched DESC LIMIT 1",
-            $query, $radius
-        ),
-        ARRAY_A
-    );
+    // If destination is provided, include it in the search
+    if ($destination !== null) {
+        return $wpdb->get_row(
+            $wpdb->prepare(
+                "SELECT * FROM {$wpdb->prefix}gpd_search_sessions WHERE query = %s AND radius = %d AND destination = %s AND is_complete = 0 ORDER BY last_fetched DESC LIMIT 1",
+                $query, $radius, $destination
+            ),
+            ARRAY_A
+        );
+    } else {
+        return $wpdb->get_row(
+            $wpdb->prepare(
+                "SELECT * FROM {$wpdb->prefix}gpd_search_sessions WHERE query = %s AND radius = %d AND is_complete = 0 ORDER BY last_fetched DESC LIMIT 1",
+                $query, $radius
+            ),
+            ARRAY_A
+        );
+    }
 }
 
-function gpd_create_search_session($query, $radius, $page_token = null) {
+function gpd_create_search_session($query, $radius, $destination, $page_token = null) {
     global $wpdb;
     // Always store an empty string if null, to avoid SQL NULLs
     $page_token = $page_token !== null ? $page_token : '';
@@ -21,6 +32,7 @@ function gpd_create_search_session($query, $radius, $page_token = null) {
         [
             'query'            => $query,
             'radius'           => $radius,
+            'destination'      => $destination, // Save the resolved destination
             'last_page_token'  => $page_token,
             'last_fetched'     => current_time('mysql'),
             'is_complete'      => 0
@@ -29,7 +41,7 @@ function gpd_create_search_session($query, $radius, $page_token = null) {
     if ($result === false) {
         error_log("gpd_create_search_session: DB insert failed! Error: " . $wpdb->last_error);
     } else {
-        error_log("gpd_create_search_session: DB insert result: $result, page_token: \"$page_token\"");
+        error_log("gpd_create_search_session: DB insert result: $result, page_token: \"$page_token\", destination: \"$destination\"");
     }
     return $wpdb->insert_id;
 }

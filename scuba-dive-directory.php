@@ -15,7 +15,7 @@ require_once plugin_dir_path(__FILE__) . 'includes/gpd-taxonomies.php';
 require_once plugin_dir_path(__FILE__) . 'includes/gpd-install.php'; // Custom DB tables
 require_once plugin_dir_path(__FILE__) . 'includes/gpd-admin-ui.php';
 require_once plugin_dir_path(__FILE__) . 'includes/gpd-import-handler.php';
-
+require_once plugin_dir_path(__FILE__) . 'includes/gpd-database-integration.php';
 
 function gpd_enqueue_admin_assets($hook) {
     // Only load on our plugin admin pages

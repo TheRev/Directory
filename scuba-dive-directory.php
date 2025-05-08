@@ -9,13 +9,13 @@
 if (!defined('ABSPATH')) exit; // Exit if accessed directly
 
 // Load core plugin files
-require_once plugin_dir_path(__FILE__) . 'includes/search-history.php';
+require_once plugin_dir_path(__FILE__) . 'includes/gpd-search-history.php';
 require_once plugin_dir_path(__FILE__) . 'includes/gpd-post-types.php';
 require_once plugin_dir_path(__FILE__) . 'includes/gpd-taxonomies.php';
 require_once plugin_dir_path(__FILE__) . 'includes/gpd-install.php'; // Custom DB tables
 require_once plugin_dir_path(__FILE__) . 'includes/gpd-admin-ui.php';
 require_once plugin_dir_path(__FILE__) . 'includes/gpd-import-handler.php';
-
+require_once plugin_dir_path(__FILE__) . 'includes/gpd-search-sessions.php';
 
 function gpd_enqueue_admin_assets($hook) {
     // Only load on our plugin admin pages

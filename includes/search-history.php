@@ -1,96 +1,56 @@
 <?php
-// ✅ Ensure this file is only loaded in the admin area
-if (!defined('ABSPATH')) {
-    exit; // Exit if accessed directly
+// Helper functions for managing gpd_search_sessions table
+
+function gpd_get_search_session($query, $radius) {
+    global $wpdb;
+    return $wpdb->get_row(
+        $wpdb->prepare(
+            "SELECT * FROM {$wpdb->prefix}gpd_search_sessions WHERE query = %s AND radius = %d AND is_complete = 0 ORDER BY last_fetched DESC LIMIT 1",
+            $query, $radius
+        ),
+        ARRAY_A
+    );
 }
 
-// ✅ Render Search History Page Function
-function gpd_render_search_history_page() {
-    if (!current_user_can('manage_options')) {
-        wp_die(__('Unauthorized access', 'gpd'));
-    }
-
+function gpd_create_search_session($query, $radius, $page_token = null) {
     global $wpdb;
-    $table_name = $wpdb->prefix . 'gpd_cache'; // Adjusted to the correct table name
-
-    // ✅ Debugging: Check if table exists
-    error_log("Checking if table $table_name exists...");
-    if ($wpdb->get_var("SHOW TABLES LIKE '$table_name'") !== $table_name) {
-        error_log("Table $table_name does not exist. Please verify table creation.");
-        echo '<div class="error"><p>Cache table does not exist. Please ensure the database is set up correctly.</p></div>';
-        return;
+    // Always store an empty string if null, to avoid SQL NULLs
+    $page_token = $page_token !== null ? $page_token : '';
+    $result = $wpdb->insert(
+        "{$wpdb->prefix}gpd_search_sessions",
+        [
+            'query'            => $query,
+            'radius'           => $radius,
+            'last_page_token'  => $page_token,
+            'last_fetched'     => current_time('mysql'),
+            'is_complete'      => 0
+        ]
+    );
+    if ($result === false) {
+        error_log("gpd_create_search_session: DB insert failed! Error: " . $wpdb->last_error);
+    } else {
+        error_log("gpd_create_search_session: DB insert result: $result, page_token: \"$page_token\"");
     }
+    return $wpdb->insert_id;
+}
 
-    // ✅ Handle Clear Cache Request
-    if (isset($_GET['clear_cache']) && !empty($_GET['clear_cache'])) {
-        $cache_id = intval($_GET['clear_cache']);
-        error_log("Clearing cache entry with ID: $cache_id");
-        $wpdb->delete($table_name, ['id' => $cache_id]);
-        wp_redirect(admin_url('admin.php?page=gpd-search-history&message=Cache cleared'));
-        exit;
+function gpd_update_search_session($session_id, $next_page_token, $is_complete = 0) {
+    global $wpdb;
+    // Always store an empty string if null, to avoid SQL NULLs
+    $next_page_token = $next_page_token !== null ? $next_page_token : '';
+    error_log("gpd_update_search_session: session_id=$session_id, token=\"$next_page_token\", complete=$is_complete");
+    $result = $wpdb->update(
+        "{$wpdb->prefix}gpd_search_sessions",
+        [
+            'last_page_token' => $next_page_token,
+            'last_fetched'    => current_time('mysql'),
+            'is_complete'     => $is_complete
+        ],
+        ['id' => $session_id]
+    );
+    if ($result === false) {
+        error_log("gpd_update_search_session: DB update failed! Error: " . $wpdb->last_error);
+    } else {
+        error_log("gpd_update_search_session: DB update result: $result");
     }
-
-    // ✅ Handle Clear All Cache
-    if (isset($_GET['clear_all_cache'])) {
-        error_log("Clearing all cache entries...");
-        $wpdb->query("TRUNCATE TABLE $table_name");
-        wp_redirect(admin_url('admin.php?page=gpd-search-history&message=All cache cleared'));
-        exit;
-    }
-
-    // ✅ Fetch Cache Entries
-    error_log("Fetching cache entries from $table_name...");
-    $cache_entries = $wpdb->get_results("SELECT * FROM $table_name ORDER BY cached_at DESC");
-
-    ?>
-    <div class="wrap">
-        <h1>Search History</h1>
-
-        <?php if (isset($_GET['message'])) : ?>
-            <div class="updated notice is-dismissible"><p><?php echo esc_html($_GET['message']); ?></p></div>
-        <?php endif; ?>
-
-        <table class="widefat fixed striped">
-            <thead>
-                <tr>
-                    <th>Destination</th>
-                    <th>Last Cached</th>
-                    <th>Pages Cached</th>
-                    <th>Items Imported</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                <?php if (!empty($cache_entries)) : ?>
-                    <?php foreach ($cache_entries as $entry) : 
-                        // ✅ Calculate Pages Cached and Items Imported
-                        $response_data = json_decode($entry->response_json, true);
-                        $pages_cached = isset($response_data) ? count($response_data) : 0;
-                        $items_imported = $entry->items_imported ?? 0;
-
-                        // ✅ Debugging: Log cache entry details
-                        error_log("Cache Entry ID: {$entry->id}, Query Hash: {$entry->query_hash}, Pages Cached: $pages_cached, Items Imported: $items_imported");
-                    ?>
-                        <tr>
-                            <td><?php echo esc_html($entry->query_hash); ?></td>
-                            <td><?php echo esc_html($entry->cached_at); ?></td>
-                            <td><?php echo esc_html($pages_cached); ?></td>
-                            <td><?php echo esc_html($items_imported); ?></td>
-                            <td>
-                                <a href="admin.php?page=gpd-search-history&clear_cache=<?php echo esc_attr($entry->id); ?>" class="button button-secondary">Clear Cache</a>
-                                <a href="admin.php?page=gpd-import&query=<?php echo esc_attr($entry->query_hash); ?>" class="button button-primary">Resume Import</a>
-                            </td>
-                        </tr>
-                    <?php endforeach; ?>
-                <?php else : ?>
-                    <tr><td colspan="5">No cached searches found.</td></tr>
-                <?php endif; ?>
-            </tbody>
-        </table>
-
-        <p>
-            <a href="admin.php?page=gpd-search-history&clear_all_cache=1" class="button button-primary">Clear All Cache</a>
-        </p>
-    </div>
-    <?php
 }

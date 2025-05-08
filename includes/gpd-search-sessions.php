@@ -3,8 +3,7 @@
 
 function gpd_get_search_session($query, $radius, $destination = null) {
     global $wpdb;
-    // If destination is provided, include it in the search
-    if ($destination !== null) {
+    if ($destination !== null && $destination !== '') {
         return $wpdb->get_row(
             $wpdb->prepare(
                 "SELECT * FROM {$wpdb->prefix}gpd_search_sessions WHERE query = %s AND radius = %d AND destination = %s AND is_complete = 0 ORDER BY last_fetched DESC LIMIT 1",
@@ -15,7 +14,7 @@ function gpd_get_search_session($query, $radius, $destination = null) {
     } else {
         return $wpdb->get_row(
             $wpdb->prepare(
-                "SELECT * FROM {$wpdb->prefix}gpd_search_sessions WHERE query = %s AND radius = %d AND is_complete = 0 ORDER BY last_fetched DESC LIMIT 1",
+                "SELECT * FROM {$wpdb->prefix}gpd_search_sessions WHERE query = %s AND radius = %d AND (destination = '' OR destination IS NULL) AND is_complete = 0 ORDER BY last_fetched DESC LIMIT 1",
                 $query, $radius
             ),
             ARRAY_A

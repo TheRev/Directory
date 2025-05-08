@@ -81,32 +81,23 @@ function gpd_render_settings_page() {
     <?php
 }
 
-// ✅ Admin Menus
+// ✅ Admin Menus for "Shops" CPT with custom submenus in proper order
 function gpd_admin_menus() {
-    // Top-level menu
-    add_menu_page(
+    $parent_slug = 'edit.php?post_type=gpd_shop'; // <-- Use your actual CPT slug if different
+
+    // Import submenu
+    add_submenu_page(
+        $parent_slug,
         'Import Places',
-        'Google Places',
+        'Import',
         'manage_options',
         'gpd-import',
-        'gpd_render_import_page',
-        'dashicons-location-alt',
-        25
+        'gpd_render_import_page'
     );
 
-    // Submenu: Settings
+    // Search History submenu
     add_submenu_page(
-        'gpd-import',
-        'Google Places Settings',
-        'Settings',
-        'manage_options',
-        'gpd-settings',
-        'gpd_render_settings_page'
-    );
-
-    // Submenu: Search History
-    add_submenu_page(
-        'gpd-import',
+        $parent_slug,
         'Search History',
         'Search History',
         'manage_options',
@@ -114,11 +105,20 @@ function gpd_admin_menus() {
         'gpd_render_search_history_page'
     );
 
-    // Register API Key setting
+    // Settings submenu (appears last)
+    add_submenu_page(
+        $parent_slug,
+        'Google Places Settings',
+        'Settings',
+        'manage_options',
+        'gpd-settings',
+        'gpd_render_settings_page'
+    );
+
+    // Register API Key setting (for Settings page)
     register_setting('gpd_settings_group', 'gpd_api_key');
 }
 add_action('admin_menu', 'gpd_admin_menus');
-
 // ✅ Admin Scripts (enqueue only on plugin admin pages)
 add_action('admin_enqueue_scripts', function ($hook) {
     if (strpos($hook, 'gpd-import') !== false) {

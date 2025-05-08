@@ -198,70 +198,56 @@ function gpd_search_places_handler() {
         wp_die();
     }
 
-    $output = '';
+    $output = '<table class="wp-list-table widefat fixed striped"><thead><tr><th class="check-column"><input type="checkbox" /></th><th>Name & Address</th><th>City</th><th>Actions</th></tr></thead><tbody>';
     $shown = 0;
 
-    // ✅ Normalize destination once from search query
-$components = $place['addressComponents'] ?? [];
-$destination_hint =
-    gpd_extract_address_part($components, 'locality') ?:
-    gpd_extract_address_part($components, 'administrative_area_level_2') ?:
-    gpd_extract_address_part($components, 'sublocality') ?:
-    'Unassigned';
+    foreach ($data['places'] as $place) {
+        $place_id = esc_sql($place['name']);
+        $already = $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(*) FROM {$wpdb->prefix}gpd_businesses WHERE place_id = %s",
+            $place_id
+        ));
 
-foreach ($data['places'] as $place) {
-    $place_id = esc_sql($place['name']);
-    $already = $wpdb->get_var($wpdb->prepare(
-        "SELECT COUNT(*) FROM {$wpdb->prefix}gpd_businesses WHERE place_id = %s",
-        $place_id
-    ));
+        $display_name = esc_html($place['displayName']['text'] ?? 'Unnamed');
+        $components = $place['addressComponents'] ?? [];
+        $street = gpd_extract_address_part($components, 'route');
+        $city = gpd_extract_address_part($components, 'locality');
+        $state = gpd_extract_address_part($components, 'administrative_area_level_1');
+        $postal = gpd_extract_address_part($components, 'postal_code');
+        $country = gpd_extract_address_part($components, 'country');
+        $address = implode(', ', array_filter([$street, $city, $state, $postal, $country]));
 
-    $display_name = esc_html($place['displayName']['text'] ?? 'Unnamed');
-    $address = esc_html($place['formattedAddress'] ?? '');
+        $row_style = $already ? 'background-color:#ffe0e0;' : 'background-color:#f0fff0;';
+        $disabled_attr = $already ? 'disabled' : '';
+        $label = $already ? '<strong>[Imported]</strong>' : '';
 
-    // Break out address components
-    $components = $place['addressComponents'] ?? [];
-    $street = gpd_extract_address_part($components, 'route');
-    $city = gpd_extract_address_part($components, 'locality');
-    $state = gpd_extract_address_part($components, 'administrative_area_level_1');
-    $postal = gpd_extract_address_part($components, 'postal_code');
-    $country = gpd_extract_address_part($components, 'country');
+        $output .= '<tr class="gpd-place-row" style="' . $row_style . '">';
+        $output .= '<th scope="row" class="check-column"><input type="checkbox" class="gpd-select-place" ' . $disabled_attr . ' /></th>';
+        $output .= '<td><strong>' . $display_name . '</strong><br>' . esc_html($address) . '</td>';
+        $output .= '<td>' . esc_html($city ?: 'Unassigned') . '</td>';
+        $output .= '<td>' . $label . ' <button class="button gpd-delete-row">🗑️</button></td>';
+        $output .= '</tr>';
 
-    if (!$address && ($street || $city || $state)) {
-        $address_parts = array_filter([$street, $city, $state, $postal, $country]);
-        $address = esc_html(implode(', ', $address_parts));
+        $shown++;
     }
 
-    // Display formatting based on already-imported status
-    $row_style = $already ? 'background-color:#ffe0e0;' : 'background-color:#f0fff0;';
-    $disabled_attr = $already ? 'disabled' : '';
-    $label = $already ? '<strong>[Imported]</strong>' : '';
-
-    $output .= '<tr class="gpd-place-row" style="' . $row_style . '">';
-    $output .= '<th scope="row" class="check-column"><input type="checkbox" class="gpd-select-place" ' . $disabled_attr . ' /></th>';
-    $output .= '<td><strong>' . $display_name . '</strong><br>' . $address . '</td>';
-    $output .= '<td><em>' . esc_html($city ?: 'Unassigned') . '</em></td>';
-    $output .= '<td>' . $label . ' <button class="button gpd-delete-row">🗑️</button></td>';
-    $output .= '<script type="application/json" class="gpd-place-data">' . wp_json_encode($place) . '</script>';
-    $output .= '</tr>';
-
-    $shown++;
-}
-
-
-    if ($shown === 0 && !$next_token) {
-        $output .= '<tr><td colspan="4"><em>No shops found matching your search.</em></td></tr>';
-    } elseif ($shown === 0 && $next_token) {
-        $output .= '<tr><td colspan="4"><em>No new shops to show on this page. Click Search again for more.</em></td></tr>';
-    } elseif ($shown > 0 && !$next_token && isset($data['nextPageToken'])) {
-        $output .= '<tr><td colspan="4"><em>Showing initial results. Click Next Page for more.</em></td></tr>';
-    } elseif ($shown > 0 && !$next_token && !isset($data['nextPageToken'])) {
-        $output .= '<tr><td colspan="4"><em>Showing all available shops for this search.</em></td></tr>';
-    }
+    $output .= '</tbody></table>';
 
     wp_send_json([
         'html' => $output,
         'next_page_token' => $data['nextPageToken'] ?? null
     ]);
     wp_die();
+}
+
+// ✅ Helper Function: Extract Address Part
+if (!function_exists('gpd_extract_address_part')) {
+    function gpd_extract_address_part($components, $type) {
+        foreach ($components as $component) {
+            if (in_array($type, $component['types'])) {
+                return sanitize_text_field($component['longText'] ?? '');
+            }
+        }
+        return null;
+    }
 }

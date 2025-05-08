@@ -199,6 +199,14 @@ function gpd_search_places_handler() {
     $body = wp_remote_retrieve_body($response);
     $data = json_decode($body, true);
 
+// Debug the Places API response and nextPageToken
+error_log('API RESPONSE: ' . print_r($data, true));
+if (isset($data['nextPageToken'])) {
+    error_log('nextPageToken exists: ' . $data['nextPageToken']);
+} else {
+    error_log('nextPageToken is NOT set in response.');
+}
+
     if (!isset($data['places']) || !is_array($data['places'])) {
         $error_message = 'No places found or error in API call.';
         if (isset($data['error'])) {
@@ -238,8 +246,8 @@ function gpd_search_places_handler() {
         $cached_at = current_time('mysql');
         foreach ($data['places'] as $place) {
             // Debug: inspect the $place structure
-            error_log("---- DEBUG: Full place array ----");
-            error_log(print_r($place, true));
+          //  error_log("---- DEBUG: Full place array ----");
+         //   error_log(print_r($place, true));
 
             $place_id    = sanitize_text_field($place['name']);
 
@@ -260,7 +268,7 @@ function gpd_search_places_handler() {
             $postal_code = gpd_extract_address_part($components, 'postal_code');
 
             // Debug: log extracted values
-            error_log("Extracted for place_id $place_id: subpremise=$subpremise, street_number=$street_num, route=$route, locality=$locality, admin_area2=$admin_area2, admin_area1=$admin_area1, country=$country, postal_code=$postal_code");
+            // error_log("Extracted for place_id $place_id: subpremise=$subpremise, street_number=$street_num, route=$route, locality=$locality, admin_area2=$admin_area2, admin_area1=$admin_area1, country=$country, postal_code=$postal_code");
 
             $destination = strtolower($locality ?: 'unassigned');
 
@@ -358,9 +366,10 @@ function gpd_search_places_handler() {
     }
 
     // --- SESSION LOGIC BLOCK: update session progress after API response ---
-    $next_page_token = $data['nextPageToken'] ?? null;
-    $is_complete = $next_page_token ? 0 : 1;
-    gpd_update_search_session($session_id, $next_page_token, $is_complete);
+$next_page_token = isset($data['nextPageToken']) ? $data['nextPageToken'] : '';
+$is_complete = $next_page_token ? 0 : 1;
+error_log('About to update session ' . $session_id . ' with token: "' . $next_page_token . '"');
+gpd_update_search_session($session_id, $next_page_token, $is_complete);
 
     if ($shown === 0 && !$next_page_token) {
         $output .= '<tr><td colspan="4"><em>No shops found matching your search.</em></td></tr>';

@@ -152,16 +152,16 @@ function gpd_search_places_handler() {
 
     $url = 'https://places.googleapis.com/v1/places:searchText';
 
-    $post_data = [
-        'textQuery'    => $query,
-        'languageCode' => 'en',
-        'regionCode'   => 'US',
-        'pageSize'     => $limit,
-    ];
-    if ($next_token) {
-        $post_data['pageToken'] = $next_token;
-        unset($post_data['pageSize']); // Remove pageSize for paginated requests
-    }
+$post_data = [
+    'textQuery'    => $query,
+    'languageCode' => 'en',
+    'regionCode'   => 'US',
+    'pageSize'     => $limit,
+];
+if ($next_token) {
+    $post_data['pageToken'] = $next_token;
+    // Do NOT unset pageSize! Always send it so Google respects your limit.
+}
 
     $args = [
         'body' => wp_json_encode($post_data),

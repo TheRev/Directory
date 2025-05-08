@@ -197,44 +197,98 @@ if ($next_token) {
         ]);
         wp_die();
     }
+// Helper function for extracting a component by type
+if (!function_exists('gpd_extract_address_part')) {
+    function gpd_extract_address_part($components, $type) {
+        foreach ($components as $component) {
+            if (
+                is_array($component) &&
+                !empty($component['types']) &&
+                in_array($type, $component['types'], true)
+            ) {
+                // Prefer longText, then long_name if somehow present
+                if (isset($component['longText'])) {
+                    return $component['longText'];
+                } elseif (isset($component['long_name'])) {
+                    return $component['long_name'];
+                }
+            }
+        }
+        return '';
+    }
+}
+
 // --- BEGIN: Save results to cache table ---
 if (isset($data['places']) && is_array($data['places'])) {
     $query_hash = md5($query . $radius); // You can add more params if you want the hash to be unique
     $cached_at = current_time('mysql');
     foreach ($data['places'] as $place) {
-        // Set $place_id the same way as in your import handler.
-        // Prefer a unique Google Place ID if available, otherwise fallback to name.
-        $place_id = '';
-        if (isset($place['place_id'])) {
-            $place_id = sanitize_text_field($place['place_id']);
-        } elseif (isset($place['id'])) {
-            $place_id = sanitize_text_field($place['id']);
-        } elseif (isset($place['name'])) {
-            $place_id = sanitize_text_field($place['name']);
+        // Debug: inspect the $place structure
+        error_log("---- DEBUG: Full place array ----");
+        error_log(print_r($place, true));
+
+        $place_id    = sanitize_text_field($place['name']);
+
+        // Try both possible keys for address components
+        $components  = $place['addressComponents'] ?? $place['address_components'] ?? [];
+        if (empty($components)) {
+            error_log("WARNING: address components missing for place_id: $place_id, place data: " . print_r($place, true));
         }
 
-        $wpdb->insert(
+        // Extract all relevant address parts
+        $subpremise  = gpd_extract_address_part($components, 'subpremise');
+        $street_num  = gpd_extract_address_part($components, 'street_number');
+        $route       = gpd_extract_address_part($components, 'route');
+        $locality    = gpd_extract_address_part($components, 'locality');
+        $admin_area2 = gpd_extract_address_part($components, 'administrative_area_level_2');
+        $admin_area1 = gpd_extract_address_part($components, 'administrative_area_level_1');
+        $country     = gpd_extract_address_part($components, 'country');
+        $postal_code = gpd_extract_address_part($components, 'postal_code');
+
+        // Debug: log extracted values
+        error_log("Extracted for place_id $place_id: subpremise=$subpremise, street_number=$street_num, route=$route, locality=$locality, admin_area2=$admin_area2, admin_area1=$admin_area1, country=$country, postal_code=$postal_code");
+
+        $destination = strtolower($locality ?: 'unassigned');
+
+        // Use REPLACE to upsert on place_id
+        $result = $wpdb->replace(
             $wpdb->prefix . 'gpd_cache',
             [
-                'query_hash'         => $query_hash,
-                'destination'        => $query, // or use a parsed city/destination if you have one
-                'page_token'         => $next_token ?? '',
-                'cached_at'          => $cached_at,
-                'place_id'           => $place_id,
-                'name'               => $place['displayName']['text'] ?? '',
-                'address'            => $place['formattedAddress'] ?? '',
-                'latitude'           => $place['location']['latitude'] ?? null,
-                'longitude'          => $place['location']['longitude'] ?? null,
-                'types'              => maybe_serialize($place['types'] ?? []),
-                'rating'             => $place['rating'] ?? null,
-                'user_ratings_total' => $place['userRatingCount'] ?? null,
-                'phone_number'       => $place['internationalPhoneNumber'] ?? '',
-                'website'            => $place['websiteUri'] ?? '',
-                'google_maps_url'    => $place['googleMapsUri'] ?? '',
-                'imported_count'     => 0,
-                'pages_imported'     => 1,
+                'query_hash'                  => $query_hash,
+                'destination'                 => $destination,
+                'page_token'                  => $next_token ?? '',
+                'cached_at'                   => $cached_at,
+                'place_id'                    => $place_id,
+                'name'                        => sanitize_text_field($place['displayName']['text'] ?? ''),
+                'address'                     => sanitize_text_field($place['formattedAddress'] ?? ''),
+                'latitude'                    => isset($place['location']['latitude']) ? (float)$place['location']['latitude'] : null,
+                'longitude'                   => isset($place['location']['longitude']) ? (float)$place['location']['longitude'] : null,
+                'types'                       => maybe_serialize($place['types'] ?? []),
+                'rating'                      => isset($place['rating']) ? (float)$place['rating'] : null,
+                'user_ratings_total'          => isset($place['userRatingCount']) ? (int)$place['userRatingCount'] : null,
+                'website'                     => sanitize_text_field($place['websiteUri'] ?? ''),
+                'phone_number'                => sanitize_text_field($place['internationalPhoneNumber'] ?? ''),
+                'google_maps_url'             => sanitize_text_field($place['googleMapsUri'] ?? ''),
+                'business_status'             => sanitize_text_field($place['businessStatus'] ?? ''),
+                'imported_count'              => 0,
+                'pages_imported'              => 1,
+                // Individual address component columns:
+                'subpremise'                  => $subpremise,
+                'street_number'               => $street_num,
+                'route'                       => $route,
+                'locality'                    => $locality,
+                'administrative_area_level_2' => $admin_area2,
+                'administrative_area_level_1' => $admin_area1,
+                'country'                     => $country,
+                'postal_code'                 => $postal_code
             ]
         );
+
+        if ($result === false) {
+            error_log("DB ERROR: Failed to REPLACE for place_id: $place_id. Last error: " . $wpdb->last_error);
+        } else {
+            error_log("SUCCESS: Place $place_id cached/updated.");
+        }
     }
 }
 // --- END: Save results to cache table ---

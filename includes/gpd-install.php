@@ -3,11 +3,8 @@ function gpd_install_database_table() {
     global $wpdb;
     $charset_collate = $wpdb->get_charset_collate();
 
-    $businesses_table = $wpdb->prefix . 'gpd_businesses';
-    $cache_table = $wpdb->prefix . 'gpd_cache';
-    $search_cache_table = $wpdb->prefix . 'gpd_search_cache'; // ✅ New Search Cache Table
-
     // ✅ Businesses Table (existing)
+    $businesses_table = $wpdb->prefix . 'gpd_businesses';
     $sql1 = "CREATE TABLE $businesses_table (
         id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
         place_id VARCHAR(255) NOT NULL UNIQUE,
@@ -36,30 +33,34 @@ function gpd_install_database_table() {
         PRIMARY KEY (id)
     ) $charset_collate;";
 
-    // ✅ Cache Table (existing)
+    // ✅ Consolidated Cache Table
+    $cache_table = $wpdb->prefix . 'gpd_cache';
     $sql2 = "CREATE TABLE $cache_table (
         id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-        query_hash VARCHAR(64) NOT NULL,
-        page_token VARCHAR(255) DEFAULT '',
-        cached_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        response_json LONGTEXT,
+        query_hash VARCHAR(64) NOT NULL, -- Unique hash for the search query
+        destination VARCHAR(100) DEFAULT NULL, -- Search destination or query identifier
+        page_token VARCHAR(255) DEFAULT '', -- Token for paginated results
+        cached_at DATETIME DEFAULT CURRENT_TIMESTAMP, -- When the data was cached
+        place_id VARCHAR(255) NOT NULL, -- Unique ID of the place
+        name VARCHAR(255) NOT NULL, -- Place name
+        address TEXT, -- Full address
+        latitude DECIMAL(10, 6), -- Latitude
+        longitude DECIMAL(10, 6), -- Longitude
+        types TEXT, -- Place types (e.g., restaurant, store)
+        rating DECIMAL(2, 1), -- Average rating
+        user_ratings_total INT, -- Number of user ratings
+        phone_number VARCHAR(50), -- Phone number
+        website TEXT, -- Website URL
+        google_maps_url TEXT, -- Google Maps URL
+        imported_count INT DEFAULT 0, -- Number of businesses imported for this search
+        pages_imported INT DEFAULT 0, -- Number of pages imported
         PRIMARY KEY (id),
-        KEY query_page (query_hash, page_token)
+        UNIQUE KEY query_place (query_hash, place_id), -- Prevent duplicate entries for the same query and place
+        KEY idx_page_token (page_token)
     ) $charset_collate;";
 
-    // ✅ Search Cache Table (new)
-    $sql3 = "CREATE TABLE $search_cache_table (
-        id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-        destination VARCHAR(100) NOT NULL,
-        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        imported_count INT DEFAULT 0,
-        pages_imported INT DEFAULT 0,
-        PRIMARY KEY (id),
-        UNIQUE KEY destination (destination)
-    ) $charset_collate;";
-
+    // ✅ Run the SQL to create/update the tables
     require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-    dbDelta($sql1);
-    dbDelta($sql2);
-    dbDelta($sql3); // ✅ Add this
+    dbDelta($sql1); // Create or update the businesses table
+    dbDelta($sql2); // Create or update the consolidated cache table
 }

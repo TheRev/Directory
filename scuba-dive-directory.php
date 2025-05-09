@@ -9,7 +9,6 @@
 if (!defined('ABSPATH')) exit; // Exit if accessed directly
 
 // Load core plugin files
-require_once plugin_dir_path(__FILE__) . 'includes/gpd-search-history.php';
 require_once plugin_dir_path(__FILE__) . 'includes/gpd-post-types.php';
 require_once plugin_dir_path(__FILE__) . 'includes/gpd-taxonomies.php';
 require_once plugin_dir_path(__FILE__) . 'includes/gpd-install.php'; // Custom DB tables

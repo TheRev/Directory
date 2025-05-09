@@ -95,16 +95,6 @@ function gpd_admin_menus() {
         'gpd_render_import_page'
     );
 
-    // Search History submenu
-    add_submenu_page(
-        $parent_slug,
-        'Search History',
-        'Search History',
-        'manage_options',
-        'gpd-search-history',
-        'gpd_render_search_history_page'
-    );
-
     // Settings submenu (appears last)
     add_submenu_page(
         $parent_slug,
@@ -119,6 +109,7 @@ function gpd_admin_menus() {
     register_setting('gpd_settings_group', 'gpd_api_key');
 }
 add_action('admin_menu', 'gpd_admin_menus');
+
 // ✅ Admin Scripts (enqueue only on plugin admin pages)
 add_action('admin_enqueue_scripts', function ($hook) {
     if (strpos($hook, 'gpd-import') !== false) {
@@ -153,12 +144,13 @@ function gpd_search_places_handler() {
     }
 
     // --- SESSION LOGIC BLOCK START ---
-    $session = gpd_get_search_session($query, $radius);
+    $destination = isset($_POST['destination']) ? trim(sanitize_text_field($_POST['destination'])) : '';
+    $session = gpd_get_search_session($query, $radius, $destination);
     if ($session) {
         $page_token = $session['last_page_token'];
         $session_id = $session['id'];
     } else {
-        $session_id = gpd_create_search_session($query, $radius, $next_token);
+        $session_id = gpd_create_search_session($query, $radius, $destination, $next_token);
         $page_token = $next_token;
     }
     // --- SESSION LOGIC BLOCK END ---
@@ -199,13 +191,13 @@ function gpd_search_places_handler() {
     $body = wp_remote_retrieve_body($response);
     $data = json_decode($body, true);
 
-// Debug the Places API response and nextPageToken
-error_log('API RESPONSE: ' . print_r($data, true));
-if (isset($data['nextPageToken'])) {
-    error_log('nextPageToken exists: ' . $data['nextPageToken']);
-} else {
-    error_log('nextPageToken is NOT set in response.');
-}
+    // Debug the Places API response and nextPageToken
+    error_log('API RESPONSE: ' . print_r($data, true));
+    if (isset($data['nextPageToken'])) {
+        error_log('nextPageToken exists: ' . $data['nextPageToken']);
+    } else {
+        error_log('nextPageToken is NOT set in response.');
+    }
 
     if (!isset($data['places']) || !is_array($data['places'])) {
         $error_message = 'No places found or error in API call.';
@@ -245,10 +237,6 @@ if (isset($data['nextPageToken'])) {
         $query_hash = md5($query . $radius); // You can add more params if you want the hash to be unique
         $cached_at = current_time('mysql');
         foreach ($data['places'] as $place) {
-            // Debug: inspect the $place structure
-          //  error_log("---- DEBUG: Full place array ----");
-         //   error_log(print_r($place, true));
-
             $place_id    = sanitize_text_field($place['name']);
 
             // Try both possible keys for address components
@@ -266,9 +254,6 @@ if (isset($data['nextPageToken'])) {
             $admin_area1 = gpd_extract_address_part($components, 'administrative_area_level_1');
             $country     = gpd_extract_address_part($components, 'country');
             $postal_code = gpd_extract_address_part($components, 'postal_code');
-
-            // Debug: log extracted values
-            // error_log("Extracted for place_id $place_id: subpremise=$subpremise, street_number=$street_num, route=$route, locality=$locality, admin_area2=$admin_area2, admin_area1=$admin_area1, country=$country, postal_code=$postal_code");
 
             $destination = strtolower($locality ?: 'unassigned');
 
@@ -366,10 +351,10 @@ if (isset($data['nextPageToken'])) {
     }
 
     // --- SESSION LOGIC BLOCK: update session progress after API response ---
-$next_page_token = isset($data['nextPageToken']) ? $data['nextPageToken'] : '';
-$is_complete = $next_page_token ? 0 : 1;
-error_log('About to update session ' . $session_id . ' with token: "' . $next_page_token . '"');
-gpd_update_search_session($session_id, $next_page_token, $is_complete);
+    $next_page_token = isset($data['nextPageToken']) ? $data['nextPageToken'] : '';
+    $is_complete = $next_page_token ? 0 : 1;
+    error_log('About to update session ' . $session_id . ' with token: "' . $next_page_token . '"');
+    gpd_update_search_session($session_id, $next_page_token, $is_complete);
 
     if ($shown === 0 && !$next_page_token) {
         $output .= '<tr><td colspan="4"><em>No shops found matching your search.</em></td></tr>';

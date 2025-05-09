@@ -4,6 +4,13 @@ require_once plugin_dir_path(__FILE__) . 'gpd-search-sessions.php';
 
 // ✅ Render Import Page
 function gpd_render_import_page() {
+    global $wpdb;
+
+    // Prefill form fields if resuming
+    $query = isset($_GET['gpd_query']) ? sanitize_text_field($_GET['gpd_query']) : '';
+    $radius = isset($_GET['gpd_radius']) ? intval($_GET['gpd_radius']) : 0;
+    $limit = isset($_GET['gpd_limit']) ? intval($_GET['gpd_limit']) : 10; // default to 10
+
     ?>
     <div class="wrap">
         <h1>Import Places from Google</h1>
@@ -11,16 +18,16 @@ function gpd_render_import_page() {
             <table class="form-table">
                 <tr>
                     <th scope="row"><label for="gpd-query">Search Term</label></th>
-                    <td><input name="gpd_query" type="text" id="gpd-query" class="regular-text" required></td>
+                    <td><input name="gpd_query" type="text" id="gpd-query" class="regular-text" required value="<?php echo esc_attr($query); ?>"></td>
                 </tr>
                 <tr>
                     <th scope="row"><label for="gpd-radius">Radius (km)</label></th>
                     <td>
                         <select name="gpd_radius" id="gpd-radius">
-                            <option value="6">6</option>
-                            <option value="15">15</option>
-                            <option value="30">30</option>
-                            <option value="50">50</option>
+                            <option value="6" <?php selected($radius, 6); ?>>6</option>
+                            <option value="15" <?php selected($radius, 15); ?>>15</option>
+                            <option value="30" <?php selected($radius, 30); ?>>30</option>
+                            <option value="50" <?php selected($radius, 50); ?>>50</option>
                         </select>
                     </td>
                 </tr>
@@ -28,10 +35,10 @@ function gpd_render_import_page() {
                     <th scope="row"><label for="gpd-limit">Results per Page</label></th>
                     <td>
                         <select name="gpd_limit" id="gpd-limit">
-                            <option value="5">5</option>
-                            <option value="10">10</option>
-                            <option value="15">15</option>
-                            <option value="20">20</option>
+                            <option value="5" <?php selected($limit, 5); ?>>5</option>
+                            <option value="10" <?php selected($limit, 10); ?>>10</option>
+                            <option value="15" <?php selected($limit, 15); ?>>15</option>
+                            <option value="20" <?php selected($limit, 20); ?>>20</option>
                         </select>
                     </td>
                 </tr>
@@ -40,12 +47,69 @@ function gpd_render_import_page() {
                 <button type="submit" class="button button-primary">Search</button>
             </p>
         </form>
-        <div id="gpd-results"></div>
-        <div id="gpd-pagination" style="margin-top:10px;"></div>
-        <div style="margin-top: 20px;">
-            <button class="button button-primary" id="gpd-import-selected">Import Selected</button>
-        </div>
-        <div id="gpd-imported-count" style="margin-top: 10px;"><strong>Imported this session:</strong> <span id="imported-count">0</span></div>
+        <?php
+        // --- If both query and radius are present (resume mode), show cached results immediately ---
+        if ($query && $radius) {
+            $query_hash = md5($query . $radius);
+            $cached_places = $wpdb->get_results(
+                $wpdb->prepare("SELECT * FROM {$wpdb->prefix}gpd_cache WHERE query_hash = %s", $query_hash),
+                ARRAY_A
+            );
+
+            if ($cached_places) {
+                echo '<h2>Cached Results for "' . esc_html($query) . '" (Radius: ' . esc_html($radius) . ' km)</h2>';
+                echo '<form method="post" id="gpd-cached-results-form">';
+                echo '<table class="widefat"><thead>
+                    <tr>
+                        <th class="check-column"><input type="checkbox" id="gpd-select-all"></th>
+                        <th>Name</th>
+                        <th>Address</th>
+                        <th>City</th>
+                        <th>Action</th>
+                    </tr>
+                    </thead><tbody>';
+                foreach ($cached_places as $place) {
+                    $display_name = esc_html($place['name'] ?? 'Unnamed');
+                    $address = esc_html($place['address'] ?? '');
+                    $city = esc_html($place['locality'] ?? $place['destination'] ?? 'Unassigned');
+                    $already = $wpdb->get_var($wpdb->prepare(
+                        "SELECT COUNT(*) FROM {$wpdb->prefix}gpd_businesses WHERE place_id = %s",
+                        $place['place_id']
+                    ));
+                    $row_style = $already ? 'background-color:#ffe0e0;' : 'background-color:#f0fff0;';
+                    $disabled_attr = $already ? 'disabled' : '';
+                    $label = $already ? '<strong>[Imported]</strong>' : '';
+                    echo '<tr class="gpd-place-row" style="' . $row_style . '">';
+                    echo '<th scope="row" class="check-column"><input type="checkbox" class="gpd-select-place" ' . $disabled_attr . ' /></th>';
+                    echo '<td><strong>' . $display_name . '</strong></td>';
+                    echo '<td>' . $address . '</td>';
+                    echo '<td>' . $city . '</td>';
+                    echo '<td>' . $label . ' <button type="button" class="button gpd-delete-row" title="Delete">🗑️</button></td>';
+                    // Place data for JS AJAX import
+                    echo '<script type="application/json" class="gpd-place-data">' . esc_html(json_encode($place)) . '</script>';
+                    echo '</tr>';
+                }
+                echo '</tbody></table>';
+                echo '<div style="margin-top: 20px;">
+                        <button class="button button-primary" id="gpd-import-selected">Import Selected</button>
+                      </div>';
+                echo '<div id="gpd-imported-count" style="margin-top: 10px;"><strong>Imported this session:</strong> <span id="imported-count">0</span></div>';
+                echo '</form>';
+                // The JS for handling import and delete will work as long as your gpd-admin.js is loaded!
+            } else {
+                echo '<div class="notice notice-info"><p>No cached places for this session.</p></div>';
+            }
+        } else {
+        ?>
+            <div id="gpd-results"></div>
+            <div id="gpd-pagination" style="margin-top:10px;"></div>
+            <div style="margin-top: 20px;">
+                <button class="button button-primary" id="gpd-import-selected">Import Selected</button>
+            </div>
+            <div id="gpd-imported-count" style="margin-top: 10px;"><strong>Imported this session:</strong> <span id="imported-count">0</span></div>
+        <?php
+        }
+        ?>
     </div>
     <?php
 }
@@ -81,7 +145,7 @@ function gpd_render_settings_page() {
     <?php
 }
 
-// ✅ Admin Menus for "Shops" CPT with custom submenus in proper order
+// ✅ Admin Menus for "Shops" CPT with custom submenus in proper order, including "Resume Imports"
 function gpd_admin_menus() {
     $parent_slug = 'edit.php?post_type=gpd_shop'; // <-- Use your actual CPT slug if different
 
@@ -93,6 +157,16 @@ function gpd_admin_menus() {
         'manage_options',
         'gpd-import',
         'gpd_render_import_page'
+    );
+
+    // Resume Imports submenu (new)
+    add_submenu_page(
+        $parent_slug,
+        'Resume Imports',
+        'Resume Imports',
+        'manage_options',
+        'gpd-search-resume',
+        'gpd_render_resume_imports_page'
     );
 
     // Settings submenu (appears last)
@@ -109,7 +183,6 @@ function gpd_admin_menus() {
     register_setting('gpd_settings_group', 'gpd_api_key');
 }
 add_action('admin_menu', 'gpd_admin_menus');
-
 // ✅ Admin Scripts (enqueue only on plugin admin pages)
 add_action('admin_enqueue_scripts', function ($hook) {
     if (strpos($hook, 'gpd-import') !== false) {
@@ -125,6 +198,8 @@ add_action('admin_enqueue_scripts', function ($hook) {
 
 // ✅ AJAX Handler - Search Places
 add_action('wp_ajax_gpd_search_places', 'gpd_search_places_handler');
+
+// ... rest of your code unchanged ...
 
 function gpd_search_places_handler() {
     global $wpdb;
